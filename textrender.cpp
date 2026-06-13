@@ -92,6 +92,44 @@ static void shape_to_glyphs(
     hb_buffer_destroy(buf);
 }
 
+// ---------------------------------------------------------------------------
+// CSS text-autospace helpers
+// ---------------------------------------------------------------------------
+
+// Returns true if cp is in a CJK ideographic block (simplified ranges).
+static bool is_cjk(char32_t cp) {
+    return (cp >= 0x3000  && cp <= 0x9FFF)   // CJK punctuation, kana, CJK unified
+        || (cp >= 0xF900  && cp <= 0xFAFF)   // CJK compatibility ideographs
+        || (cp >= 0x20000 && cp <= 0x2FA1F); // CJK extension B–F, compat supplement
+}
+
+// Returns true if cp is an ASCII letter or digit (Latin/digit script).
+static bool is_latin_or_digit(char32_t cp) {
+    return (cp >= 'A' && cp <= 'Z')
+        || (cp >= 'a' && cp <= 'z')
+        || (cp >= '0' && cp <= '9')
+        || (cp >= 0x00C0 && cp <= 0x024F);  // extended Latin
+}
+
+// Decode first Unicode codepoint from a UTF-8 string. Returns 0 on error.
+static char32_t first_codepoint(const std::string& s) {
+    if (s.empty()) return 0;
+    unsigned char c = static_cast<unsigned char>(s[0]);
+    if (c < 0x80) return c;
+    if (c < 0xE0 && s.size() >= 2)
+        return ((c & 0x1F) << 6) | (static_cast<unsigned char>(s[1]) & 0x3F);
+    if (c < 0xF0 && s.size() >= 3)
+        return ((c & 0x0F) << 12)
+             | ((static_cast<unsigned char>(s[1]) & 0x3F) << 6)
+             |  (static_cast<unsigned char>(s[2]) & 0x3F);
+    if (s.size() >= 4)
+        return ((c & 0x07) << 18)
+             | ((static_cast<unsigned char>(s[1]) & 0x3F) << 12)
+             | ((static_cast<unsigned char>(s[2]) & 0x3F) << 6)
+             |  (static_cast<unsigned char>(s[3]) & 0x3F);
+    return 0;
+}
+
 // Returns 0-based byte indices after which a hyphen may be inserted.
 // Requires word to be pure ASCII letters (libhyphen operates on lowercase).
 static std::vector<int> hyphen_breaks(HyphenDict* dict, const std::string& word) {
@@ -127,6 +165,7 @@ static std::vector<Item> build_para_items(
     double             space_w,
     double             space_s,
     double             space_k,
+    double             pt_size,
     HyphenDict*        hyph_dict = nullptr)
 {
     icu::UnicodeString ustr = icu::UnicodeString::fromUTF8(para);
@@ -142,6 +181,14 @@ static std::vector<Item> build_para_items(
     // can distribute whitespace across CJK characters for full justification.
     const double cjk_stretch = space_w * 0.5;
 
+    // CSS text-autospace: 0.25em gap at CJK<->Latin/digit boundaries.
+    const double autospace   = pt_size * 0.25;
+    const double autospace_s = pt_size * 0.05;   // small stretch for autospace
+
+    // Script tracker for autospace detection (unknown / CJK / Latin-digit).
+    enum Script { UNKNOWN, CJK, LATIN_DIGIT };
+    Script last_script = UNKNOWN;
+
     std::vector<Item> items;
     int32_t prev = 0;
 
@@ -150,8 +197,6 @@ static std::vector<Item> build_para_items(
          pos != icu::BreakIterator::DONE;
          pos = bi->next())
     {
-        icu::UnicodeString seg = ustr.tempSubStringBetween(prev, pos);
-
         // Split segment into word (non-space) + trailing space
         int32_t trail = pos;
         while (trail > prev && ustr.charAt(trail - 1) == 0x0020) --trail;
@@ -162,6 +207,36 @@ static std::vector<Item> build_para_items(
         ustr.tempSubStringBetween(prev, trail).toUTF8String(word_utf8);
 
         if (!word_utf8.empty()) {
+            // Detect script of this segment's first codepoint.
+            char32_t cp = first_codepoint(word_utf8);
+            Script cur_script = is_cjk(cp) ? CJK
+                              : is_latin_or_digit(cp) ? LATIN_DIGIT
+                              : UNKNOWN;
+
+            // Insert autospace at script boundary by widening the preceding Glue.
+            if (last_script != UNKNOWN && cur_script != UNKNOWN
+                    && last_script != cur_script
+                    && !items.empty()) {
+                // Find the last Glue in items and add autospace to it.
+                for (int k = static_cast<int>(items.size()) - 1; k >= 0; --k) {
+                    if (auto* g = std::get_if<Glue>(&items[k])) {
+                        g->width   += autospace;
+                        g->stretch += autospace_s;
+                        break;
+                    }
+                    // Stop if we hit a Box (no Glue between last Box and this one)
+                    if (std::holds_alternative<Box>(items[k])) {
+                        // Insert a new autospace Glue before this Box was emitted —
+                        // that case shouldn't happen with ICU segmentation, but
+                        // guard it by inserting one after the last item anyway.
+                        items.push_back(Glue{autospace, autospace_s, 0.0});
+                        break;
+                    }
+                }
+            }
+
+            if (cur_script != UNKNOWN) last_script = cur_script;
+
             if (has_space && hyph_dict) {
                 // Latin word: try to hyphenate
                 auto hbreaks = hyphen_breaks(hyph_dict, word_utf8);
@@ -362,7 +437,7 @@ int main(int argc, char* argv[]) {
         const std::string& para = paras[pi];
 
         // Build items using ICU Unicode Line Breaking Algorithm (UAX #14)
-        auto items = build_para_items(hb_font, para, space_w, space_s, space_k, hyph_dict);
+        auto items = build_para_items(hb_font, para, space_w, space_s, space_k, pt_size, hyph_dict);
         if (items.size() <= 2) continue;  // empty paragraph (only sentinel items)
 
         if (trace_out)
