@@ -1,11 +1,13 @@
 // textrender — render a plain-text file to PNG using
 //   HarfBuzz (shaping) + Knuth-Plass (line-breaking) + Cairo (rasterisation).
+//   Unicode Line Breaking Algorithm (ICU UAX #14) determines break opportunities,
+//   enabling correct handling of CJK text (no spaces between characters).
 //
 // Build:  see tex/Makefile
 // Usage:  ./textrender [OPTIONS] INPUT.txt OUTPUT.png
 //
 // Options:
-//   --font PATH   TTF/OTF font  (default: DejaVuSerif.ttf)
+//   --font PATH   TTF/OTF font  (default: NotoSerifCJK-Regular.ttc)
 //   --size N      font size in points  (default: 12)
 //   --width N     page width in pixels  (default: 800)
 //   --height N    page height in pixels (default: 1000)
@@ -21,6 +23,8 @@
 #include FT_FREETYPE_H
 #include <harfbuzz/hb-ft.h>
 #include <harfbuzz/hb.h>
+#include <unicode/brkiter.h>
+#include <unicode/unistr.h>
 
 #include <cstring>
 #include <fstream>
@@ -81,6 +85,83 @@ static void shape_to_glyphs(
     }
 
     hb_buffer_destroy(buf);
+}
+
+// Build Knuth-Plass items from a paragraph using ICU UAX #14 line break iterator.
+//
+// Each ICU break segment becomes a Box (measured via HarfBuzz).
+// Segments with trailing ASCII space get a Glue after them (inter-word).
+// Segments without trailing space (CJK and last word) get a micro-Glue after
+// them so the line can still be stretched for justification; mandatory breaks
+// (hard line-break class) emit a forced Penalty instead.
+static std::vector<Item> build_para_items(
+    hb_font_t*         hb_font,
+    const std::string& para,
+    double             space_w,
+    double             space_s,
+    double             space_k)
+{
+    icu::UnicodeString ustr = icu::UnicodeString::fromUTF8(para);
+
+    UErrorCode status = U_ZERO_ERROR;
+    std::unique_ptr<icu::BreakIterator> bi(
+        icu::BreakIterator::createLineInstance(icu::Locale::getDefault(), status));
+    if (U_FAILURE(status))
+        throw std::runtime_error("ICU BreakIterator creation failed");
+    bi->setText(ustr);
+
+    // Inter-CJK micro-glue: zero natural width, some stretch so Knuth-Plass
+    // can distribute whitespace across CJK characters for full justification.
+    const double cjk_stretch = space_w * 0.5;
+
+    std::vector<Item> items;
+    int32_t prev = 0;
+
+    bi->first();
+    for (int32_t pos = bi->next();
+         pos != icu::BreakIterator::DONE;
+         pos = bi->next())
+    {
+        icu::UnicodeString seg = ustr.tempSubStringBetween(prev, pos);
+
+        // Split segment into word (non-space) + trailing space
+        int32_t trail = pos;
+        while (trail > prev && ustr.charAt(trail - 1) == 0x0020) --trail;
+        bool has_space = (trail < pos);
+
+        // Decode word part to UTF-8
+        std::string word_utf8;
+        ustr.tempSubStringBetween(prev, trail).toUTF8String(word_utf8);
+
+        if (!word_utf8.empty()) {
+            double w = hb_advance_px(hb_font, word_utf8);
+            items.push_back(Box{w, word_utf8});
+
+            if (has_space) {
+                // Latin inter-word space
+                items.push_back(Glue{space_w, space_s, space_k});
+            } else {
+                // No trailing space: check if mandatory break (hard line break)
+                int rule = bi->getRuleStatus();
+                if (rule >= UBRK_LINE_HARD) {
+                    items.push_back(Penalty{-INF_PENALTY, false});
+                } else {
+                    // Optional break (CJK inter-char): micro-glue for justification
+                    items.push_back(Glue{0.0, cjk_stretch, 0.0});
+                }
+            }
+        }
+
+        prev = pos;
+    }
+
+    // Remove trailing Glue left by last segment (will be replaced by parfillskip)
+    while (!items.empty() && std::holds_alternative<Glue>(items.back()))
+        items.pop_back();
+
+    items.push_back(Glue{0.0, INF_PENALTY, 0.0});   // parfillskip
+    items.push_back(Penalty{-INF_PENALTY, false});   // forced end
+    return items;
 }
 
 // Split text on blank lines into paragraphs.
@@ -209,24 +290,9 @@ int main(int argc, char* argv[]) {
     for (size_t pi = 0; pi < paras.size(); ++pi) {
         const std::string& para = paras[pi];
 
-        // Build items: Box per word (HarfBuzz advance), Glue per space
-        std::vector<Item> items;
-        std::istringstream ss(para);
-        std::string word;
-        bool first = true;
-
-        while (ss >> word) {
-            if (!first)
-                items.push_back(Glue{space_w, space_s, space_k});
-            double w = hb_advance_px(hb_font, word);
-            items.push_back(Box{w, word});
-            first = false;
-        }
-        if (items.empty()) continue;
-
-        // parfillskip + forced-break sentinel
-        items.push_back(Glue{0.0, INF_PENALTY, 0.0});
-        items.push_back(Penalty{-INF_PENALTY, false});
+        // Build items using ICU Unicode Line Breaking Algorithm (UAX #14)
+        auto items = build_para_items(hb_font, para, space_w, space_s, space_k);
+        if (items.size() <= 2) continue;  // empty paragraph (only sentinel items)
 
         LineSpec spec = LineSpec::uniform(text_w);
         std::vector<int> breaks;
