@@ -108,7 +108,7 @@ static std::vector<std::string> split_paragraphs(const std::string& text) {
 int main(int argc, char* argv[]) {
     // Defaults
     std::string font_path =
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf";
+        "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc";
     double pt_size   = 12.0;
     int    page_w    = 800;
     int    page_h    = 1000;
