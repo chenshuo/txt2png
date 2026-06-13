@@ -395,11 +395,16 @@ int main(int argc, char* argv[]) {
     const double text_w   = page_w - 2.0 * margin;
     const double line_h   = pt_size * leading;
 
-    // Hyphenation dictionary
+    // Hyphenation dictionary — auto-enable if default dict is present.
+    static const char* default_dict = "/usr/share/hyphen/hyph_en_US.dic";
+    if (!hyphen_on && hyphen_dict_path.empty()) {
+        if (std::ifstream(default_dict).good())
+            hyphen_on = true;
+    }
     HyphenDict* hyph_dict = nullptr;
     if (hyphen_on) {
         if (hyphen_dict_path.empty())
-            hyphen_dict_path = "/usr/share/hyphen/hyph_en_US.dic";
+            hyphen_dict_path = default_dict;
         hyph_dict = hnj_hyphen_load(hyphen_dict_path.c_str());
         if (!hyph_dict)
             std::cerr << "Warning: cannot load hyphen dict: "
