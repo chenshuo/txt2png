@@ -53,3 +53,12 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled binaries
+linebreak
+textrender
