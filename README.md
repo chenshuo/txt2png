@@ -1,6 +1,6 @@
-# playground
+# txt2png
 
-## tex — Knuth-Plass line-breaking & text-to-PNG renderer
+## txt2png — Knuth-Plass line-breaking & text-to-PNG renderer
 
 Tools implement the Knuth-Plass optimal line-breaking algorithm and a CLI
 renderer that produces PNG images from plain-text files, in both C++ and Python.
@@ -39,19 +39,19 @@ This produces two binaries:
 
 | Binary | Description |
 |--------|-------------|
-| `linebreak_cpp` | CLI demo of the Knuth-Plass algorithm (monospaced, ASCII) |
+| `linebreak` | CLI demo of the Knuth-Plass algorithm (monospaced, ASCII) |
 | `textrender` | Renders a text file to PNG using HarfBuzz + Knuth-Plass + Cairo |
 
 ### Usage
 
-#### linebreak_cpp
+#### linebreak
 
 ```
-./linebreak_cpp ["text to break"] [line-width]
+./linebreak ["text to break"] [line-width]
 ```
 
 ```bash
-./linebreak_cpp "In olden times when wishing still helped one..." 72
+./linebreak "In olden times when wishing still helped one..." 72
 ```
 
 #### textrender (C++)
