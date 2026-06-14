@@ -286,7 +286,7 @@ def main():
     ap.add_argument("--margin",    type=int,   default=72,    metavar="N")
     ap.add_argument("--leading",   type=float, default=1.4,   metavar="N")
     ap.add_argument("--tolerance", type=float, default=200.0, metavar="N")
-    ap.add_argument("--hyphen",    action="store_true")
+    ap.add_argument("--nohyphen",  action="store_true")
     ap.add_argument("--hyphen-dict", default="", metavar="PATH")
     ap.add_argument("--tracingparagraphs", action="store_true")
     args = ap.parse_args()
@@ -320,10 +320,7 @@ def main():
 
     # --- Hyphenation (pyphen has built-in dictionaries) ---
     dic = None
-    hyphen_on = args.hyphen
-    if not hyphen_on and not args.hyphen_dict:
-        if os.path.exists(DEFAULT_DICT):
-            hyphen_on = True
+    hyphen_on = not args.nohyphen
     if hyphen_on:
         dic = pyphen.Pyphen(lang="en_US")
 

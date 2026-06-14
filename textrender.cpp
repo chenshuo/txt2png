@@ -14,7 +14,7 @@
 //   --margin N         margin in pixels on all sides (default: 72)
 //   --leading N        line-height multiplier (default: 1.4)
 //   --tolerance N      Knuth-Plass tolerance (default: 200)
-//   --hyphen           enable English hyphenation (libhyphen, hyph_en_US.dic)
+//   --nohyphen         disable English hyphenation (enabled by default if dict found)
 //   --hyphen-dict PATH use a custom hyphenation dictionary file
 
 #include "linebreak.h"
@@ -318,7 +318,7 @@ int main(int argc, char* argv[]) {
     int    margin    = 72;
     double leading   = 1.4;
     double tolerance = 200.0;
-    bool        hyphen_on        = false;
+    bool        hyphen_off       = false;
     std::string hyphen_dict_path;
     bool        tracing_paras   = false;
     std::string input_path, output_path;
@@ -338,8 +338,8 @@ int main(int argc, char* argv[]) {
         else if (a == "--margin")    margin    = std::stoi(need("--margin"));
         else if (a == "--leading")   leading   = std::stod(need("--leading"));
         else if (a == "--tolerance")  tolerance = std::stod(need("--tolerance"));
-        else if (a == "--hyphen")            hyphen_on = true;
-        else if (a == "--hyphen-dict")       { hyphen_dict_path = need("--hyphen-dict"); hyphen_on = true; }
+        else if (a == "--nohyphen")          hyphen_off = true;
+        else if (a == "--hyphen-dict")       hyphen_dict_path = need("--hyphen-dict");
         else if (a == "--tracingparagraphs") tracing_paras = true;
         else if (input_path.empty()) input_path  = a;
         else if (output_path.empty()) output_path = a;
@@ -357,7 +357,7 @@ int main(int argc, char* argv[]) {
             "  --margin N         margin in pixels (default: 72)\n"
             "  --leading N        line-height multiplier (default: 1.4)\n"
             "  --tolerance N      Knuth-Plass tolerance (default: 200)\n"
-            "  --hyphen              enable English hyphenation (hyph_en_US.dic)\n"
+            "  --nohyphen            disable English hyphenation (on by default if dict found)\n"
             "  --hyphen-dict PATH    use a custom hyphenation dictionary\n"
             "  --tracingparagraphs   print Knuth-Plass diagnostics to stderr\n";
         return 1;
@@ -395,16 +395,11 @@ int main(int argc, char* argv[]) {
     const double text_w   = page_w - 2.0 * margin;
     const double line_h   = pt_size * leading;
 
-    // Hyphenation dictionary — auto-enable if default dict is present.
+    // Hyphenation dictionary — on by default, disabled by --nohyphen.
     static const char* default_dict = "/usr/share/hyphen/hyph_en_US.dic";
-    if (!hyphen_on && hyphen_dict_path.empty()) {
-        if (std::ifstream(default_dict).good())
-            hyphen_on = true;
-    }
     HyphenDict* hyph_dict = nullptr;
-    if (hyphen_on) {
-        if (hyphen_dict_path.empty())
-            hyphen_dict_path = default_dict;
+    if (!hyphen_off) {
+        if (hyphen_dict_path.empty()) hyphen_dict_path = default_dict;
         hyph_dict = hnj_hyphen_load(hyphen_dict_path.c_str());
         if (!hyph_dict)
             std::cerr << "Warning: cannot load hyphen dict: "

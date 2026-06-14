@@ -61,14 +61,14 @@ Options:
   --margin N         margin in pixels on all sides (default: 72)
   --leading N        line-height multiplier (default: 1.4)
   --tolerance N      Knuth-Plass badness tolerance (default: 200)
-  --hyphen              enable English hyphenation (uses hyph_en_US.dic)
+  --nohyphen            disable English hyphenation (on by default when hyph_en_US.dic is found)
   --hyphen-dict PATH    use a custom libhyphen dictionary file
   --tracingparagraphs   print Knuth-Plass diagnostics to stderr (like TeX \tracingparagraphs=1)
 ```
 
 ```bash
-# Render Chinese + English text with hyphenation enabled
-./textrender --hyphen --size 14 --width 800 --height 1000 sample_cjk.txt out.png
+# Render Chinese + English text (hyphenation on by default)
+./textrender --size 14 --width 800 --height 1000 sample_cjk.txt out.png
 ```
 
 ### Features
@@ -79,9 +79,9 @@ Options:
   CJK, and mixed scripts.
 - **ICU Unicode Line Breaking (UAX #14)** — determines legal break
   opportunities; CJK characters can break between any two characters.
-- **libhyphen word hyphenation** — TeX-pattern hyphenation for English
-  (enabled with `--hyphen`); consecutive hyphenated lines are penalised via
-  Knuth-Plass `double_hyphen_demerits`.
+- **libhyphen word hyphenation** — TeX-pattern hyphenation for English,
+  enabled by default when `hyph_en_US.dic` is found (disable with `--nohyphen`);
+  consecutive hyphenated lines are penalised via Knuth-Plass `double_hyphen_demerits`.
 - **`--tracingparagraphs` diagnostics** — mirrors TeX's `\tracingparagraphs=1`,
   printing to stderr: pass header (`@firstpass`/`@secondpass`/`@thirdpass`),
   per-candidate lines (`@\glue via @@N b=B p=P d=D`), per-registered-node
