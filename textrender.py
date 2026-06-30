@@ -299,8 +299,8 @@ def main():
 
     # --- Spacing (em-based, CJK-font friendly) ---
     space_w = _hb_advance_px(hb_font, " ")
-    space_s = pt_size / 3.0
-    space_k = pt_size / 9.0
+    space_s = space_w / 2.0
+    space_k = space_w / 3.0
     text_w  = page_w - 2 * margin
     line_h  = pt_size * leading
 
@@ -311,7 +311,7 @@ def main():
         dic = pyphen.Pyphen(lang="en_US")
 
     # --- Knuth-Plass params ---
-    kp_params = Params(tolerance=tolerance, emergency_stretch=space_s)
+    kp_params = Params(tolerance=tolerance, emergency_stretch=pt_size)
 
     # --- Cairo surface ---
     surface = cairo.ImageSurface(cairo.FORMAT_RGB24, page_w, page_h)
@@ -334,6 +334,7 @@ def main():
             hb_font, para, space_w, space_s, space_k, pt_size, dic)
         if len(items) <= 2:
             continue
+        # print(items)
 
         spec = LineSpec.uniform(text_w)
         try:

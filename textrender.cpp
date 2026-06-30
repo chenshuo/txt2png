@@ -389,8 +389,8 @@ int main(int argc, char* argv[]) {
     // than the space glyph advance, because CJK fonts often have very narrow
     // space glyphs that produce absurdly high badness on Latin text.
     const double space_w  = hb_advance_px(hb_font, " ");
-    const double space_s  = pt_size / 3.0;   // 1/3 em stretch
-    const double space_k  = pt_size / 9.0;   // 1/9 em shrink
+    const double space_s  = space_w / 2.0;   // stretch
+    const double space_k  = space_w / 3.0;   // shrink
 
     const double text_w   = page_w - 2.0 * margin;
     const double line_h   = pt_size * leading;
@@ -409,7 +409,7 @@ int main(int argc, char* argv[]) {
     // Knuth-Plass params
     Params kp_params;
     kp_params.tolerance        = tolerance;
-    kp_params.emergency_stretch = space_s;   // last-resort stretch = 1/3 em
+    kp_params.emergency_stretch = pt_size;   // last-resort stretch = 1 em
 
     // Cairo surface
     cairo_surface_t* surface =
