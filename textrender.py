@@ -104,20 +104,11 @@ def _is_latin_or_digit(cp: int) -> bool:
 
 def _hb_advance_px(font: hb.Font, text: str, ft_face=None) -> float:
     """Measure shaped advance in pixels.
-    With ft_face: use FreeType hinted per-glyph advances (matching C++
-    hb_ft_font_create which calls FT_Load_Glyph for each glyph's advance).
-    Without ft_face: use HarfBuzz's own (unhinted) advances.
     """
     buf = hb.Buffer()
     buf.add_str(text)
     buf.guess_segment_properties()
     hb.shape(font, buf)
-    if ft_face is not None:
-        total = 0.0
-        for info in buf.glyph_infos:
-            ft_face.load_glyph(info.codepoint, freetype.FT_LOAD_DEFAULT)
-            total += ft_face.glyph.advance.x / 64.0
-        return total
     return sum(p.x_advance for p in buf.glyph_positions) / 64.0
 
 
@@ -125,7 +116,6 @@ def _shape_to_glyphs(font: hb.Font, text: str, pen_x: float, pen_y: float,
                      ft_face=None):
     """Return ([(glyph_id, x, y), ...], new_pen_x).
     Always uses HarfBuzz x_advance for pen advancement (includes GPOS kerning).
-    ft_face is accepted but unused (kept for API symmetry with _hb_advance_px).
     """
     buf = hb.Buffer()
     buf.add_str(text)
@@ -334,7 +324,6 @@ def main():
             hb_font, para, space_w, space_s, space_k, pt_size, dic)
         if len(items) <= 2:
             continue
-        # print(items)
 
         spec = LineSpec.uniform(text_w)
         try:
